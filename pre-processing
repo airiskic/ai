@@ -1,0 +1,45 @@
+# unzip folder and move to another folder
+unzip >path to zipped folder< -d >folder name moved to<
+
+# set variables
+raw_data_dir="/Users/Amilairiskic/Desktop/H_SPA"
+proc_data_dir="/Users/Amilairiskic/Desktop/H_SPA/processed/"
+mkdir $proc_data_dir
+
+# Part I.
+# Remove fixed parts of the adapter, remove reads without perfect match to the illumina 
+# index (which has to be included in the header), remove inserts that do not match the
+# oligonucleotide design, and sort the inserts. Briefly: this part extracts variable 
+# inserts from each construct and write to file.
+
+
+for index in {1..14}
+do
+
+mkdir "$proc_data_dir"/
+cd "$proc_data_dir"/
+
+mfp=$(echo "$raw_data_dir"/run*index"$index"_*.fastq.gz)
+local_index=$(awk -v filepath=$mfp 'BEGIN{print(filepath)}' | awk 'BEGIN{FS="_"}{print($6)}')
+
+zcat > "$raw_data_dir"/run*index"$index"_*.fastq.gz | 
+nice cutadapt -a CGATTGGCATCTGGGTAGNNNTGGAATTCTCGGGTGC -q 20 -m 13 -M 13 -e 0.12 - 2> cutadapt_R7.error | 
+paste - - - - | awk  -v local_index=$local_index '($2 ~ ":"local_index){print($3)}END{print(NR) > "count_after_cutadapt_R7.txt"}' | 
+grep '^[ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT]$' | 
+sort -S4G | awk '{print}END{print(NR) > "count_after_regex_R7.txt"}' | gzip > R7.txt.gz &
+
+zcat > "$raw_data_dir"/run*index"$index"_*.fastq.gz | 
+nice cutadapt -a GGCCTAGACCAAGCGTACTCNNNTGGAATTCTCGGG -q 20 -m 14 -M 14 -e 0.12 - 2> cutadapt_R4a.error | 
+paste - - - - | awk  -v local_index=$local_index '($2 ~ ":"local_index){print($3)}END{print(NR) > "count_after_cutadapt_R4a.txt"}' |
+grep '^[ACGT][ACGT][ACGT][ACGT][G][C][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT]$' | 
+sort -S4G | awk '{print}END{print(NR) > "count_after_regex_R4a.txt"}' | gzip > R4a.txt.gz &
+
+zcat > "$raw_data_dir"/run*index"$index"_*.fastq.gz | 
+nice cutadapt -a GCCTAGACCAAGCGTACTCNNNTGGAATTCTCGG -q 20 -m 16 -M 16 -e 0.12 - 2> cutadapt_R4b.error | 
+paste - - - - | awk  -v local_index=$local_index '($2 ~ ":"local_index){print($3)}END{print(NR) > "count_after_cutadapt_R4b.txt"}' | 
+grep '^[ACGT][ACGT][ACGT][CG][C][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT][ACGT]$' | 
+sort -S4G | awk '{print}END{print(NR) > "count_after_regex_R4b.txt"}' | gzip > R4b.txt.gz &
+
+wait
+
+done
